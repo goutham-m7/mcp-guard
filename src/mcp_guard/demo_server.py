@@ -123,12 +123,14 @@ def http_app(case, sse=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--case", default="benign-weather", choices=[c["id"] for c in load_corpus()]
+        "--case",
+        default="benign-weather",
+        choices=[c["id"] for c in load_corpus("all")],
     )
     parser.add_argument("--http", type=int, metavar="PORT")
     parser.add_argument("--sse", action="store_true")
     args = parser.parse_args()
-    case = next(c for c in load_corpus() if c["id"] == args.case)
+    case = next(c for c in load_corpus("all") if c["id"] == args.case)
     if args.http is not None:
         web.run_app(
             http_app(case, args.sse), host="127.0.0.1", port=args.http, print=None

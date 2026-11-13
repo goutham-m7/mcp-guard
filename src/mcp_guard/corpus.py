@@ -4,8 +4,15 @@ import json
 from importlib.resources import files
 
 
-def load_corpus():
-    return json.loads(files("mcp_guard").joinpath("data/corpus.json").read_text())
+def load_corpus(split="tuning"):
+    filenames = {"tuning": "corpus.json", "heldout": "heldout.json"}
+    if split == "all":
+        return [case for part in filenames for case in load_corpus(part)]
+    if split not in filenames:
+        raise ValueError("unknown corpus split")
+    return json.loads(
+        files("mcp_guard").joinpath("data/" + filenames[split]).read_text()
+    )
 
 
 def demo_policy():

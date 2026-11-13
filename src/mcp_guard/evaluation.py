@@ -98,17 +98,23 @@ async def evaluate(cases, directory):
         "raw_delivered": sum(r["raw_delivered"] for r in rows),
         "categories": dict(sorted(categories.items())),
         "latency_ms": {
-            "median": round(statistics.median(times), 3),
-            "p95": round(times[math.ceil(len(times) * 0.95) - 1], 3),
+            "median": round(statistics.median(times), 3) if times else 0,
+            "p95": round(times[math.ceil(len(times) * 0.95) - 1], 3) if times else 0,
         },
         "cases": rows,
     }
 
 
+def ratio(count, total):
+    return (
+        f"{count}/{total} ({100 * count / total:.1f}%)" if total else f"{count}/0 (n/a)"
+    )
+
+
 def summary(report):
     lines = [
-        f"Attacks blocked: {report['blocked']}/{report['attacks']} ({100 * report['blocked'] / report['attacks']:.1f}%)",
-        f"Benign false positives: {report['false_positives']}/{report['benign']} ({100 * report['false_positives'] / report['benign']:.1f}%)",
+        f"Attacks blocked: {ratio(report['blocked'], report['attacks'])}",
+        f"Benign false positives: {ratio(report['false_positives'], report['benign'])}",
         f"Without guard: {report['raw_delivered']}/{report['attacks'] + report['benign']} scenarios delivered; transport errors: {report['errors']}",
     ]
     for category, counts in report["categories"].items():

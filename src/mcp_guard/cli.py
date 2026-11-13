@@ -91,6 +91,9 @@ def parser():
         command.add_argument("--directory", default=".guard")
         if name == "test":
             command.add_argument(
+                "--split", choices=["tuning", "heldout", "all"], default="tuning"
+            )
+            command.add_argument(
                 "--json", action="store_true", help="emit machine-readable results"
             )
     approval = commands.add_parser(
@@ -152,7 +155,8 @@ def main():
         elif args.command == "demo":
             return asyncio.run(demo(args.directory))
         elif args.command == "test":
-            report = asyncio.run(evaluate(load_corpus(), args.directory))
+            report = asyncio.run(evaluate(load_corpus(args.split), args.directory))
+            report["split"] = args.split
             print(json.dumps(report, indent=2) if args.json else summary(report))
             return int(
                 report["blocked"] != report["attacks"]
