@@ -12,6 +12,7 @@ from aiohttp import web
 from .config import Config
 from .corpus import load_corpus
 from .evaluation import evaluate, replay, summary
+from .policy_check import check_policy
 from .rpc import MAX_BYTES, RpcError, decode, error
 from .server import create_app
 from .state import Approvals, render_audit
@@ -68,6 +69,12 @@ def parser():
         prog="mcp-guard", description="Default-deny security proxy for MCP tools"
     )
     commands = root.add_subparsers(dest="command", required=True)
+    policy = commands.add_parser("policy", help="offline policy tools")
+    policy_commands = policy.add_subparsers(dest="policy_command", required=True)
+    check = policy_commands.add_parser("check", help="validate and lint a YAML policy")
+    check.add_argument("path")
+    check.add_argument("--json", action="store_true")
+    check.add_argument("--strict", action="store_true", help="fail on warnings")
     proxy = commands.add_parser(
         "proxy", help="bridge MCP client and configured upstreams"
     )
@@ -106,6 +113,19 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        if args.command == "policy":
+            report = check_policy(args.path)
+            if args.json:
+                print(json.dumps(report))
+            else:
+                for level, entries in report.items():
+                    for entry in entries:
+                        print(f"{level}: {entry['location']}: {entry['code']}")
+                if not report["errors"] and not report["warnings"]:
+                    print("Policy valid.")
+            return (
+                2 if report["errors"] else int(args.strict and bool(report["warnings"]))
+            )
         if args.command == "proxy":
             config = Config.load(args.config)
             if args.transport == "http":
