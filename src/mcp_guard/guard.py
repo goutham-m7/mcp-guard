@@ -22,6 +22,7 @@ class Guard:
         self.upstreams, self.policy, self.detector = upstreams, policy, detector
         self.audit, self.approvals = audit, approvals
         self.pins, self.quarantined, self.tools = {}, set(), {}
+        self.upstream_capabilities = {}
         self.initialized = False
         self.lock = asyncio.Lock()
         self.events = asyncio.Queue(maxsize=100)
@@ -155,7 +156,7 @@ class Guard:
                 raise RpcError(-32602, "unsupported_protocol_version")
             if version not in VERSIONS:
                 version = max(VERSIONS)
-            for upstream in self.upstreams.values():
+            for server, upstream in self.upstreams.items():
                 info = await upstream.request(
                     method,
                     {
@@ -166,6 +167,10 @@ class Guard:
                 )
                 if info.get("protocolVersion") not in VERSIONS:
                     raise RpcError(-32002, "upstream_protocol_mismatch")
+                capabilities = info.get("capabilities", {})
+                if not isinstance(capabilities, dict):
+                    raise RpcError(-32002, "invalid_upstream_capabilities")
+                self.upstream_capabilities[server] = capabilities
             self.initialized = True
             return {
                 "protocolVersion": version,

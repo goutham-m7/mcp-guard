@@ -73,6 +73,8 @@ def validate_result(value, surface):
 async def refresh(guard, surface):
     inventory, budget = {}, 0
     for server, upstream in guard.upstreams.items():
+        if surface not in guard.upstream_capabilities.get(server, {}):
+            continue
         cursor, seen = None, set()
         for _ in range(100):
             listing = await upstream.request(

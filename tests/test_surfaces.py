@@ -155,7 +155,11 @@ async def test_paginated_surface_inventory(tmp_path):
             return {"resources": [{"name": "two", "uri": "fixture:///two"}]}
 
     guard = SimpleNamespace(
-        upstreams={"a": Peer()}, pins={}, quarantined=set(), detector=Detector()
+        upstreams={"a": Peer()},
+        pins={},
+        quarantined=set(),
+        detector=Detector(),
+        upstream_capabilities={"a": {"resources": {}}},
     )
     assert len(await refresh(guard, "resources")) == 2
 
@@ -166,3 +170,32 @@ async def test_paginated_surface_inventory(tmp_path):
     guard.upstreams = {"a": LoopPeer()}
     with pytest.raises(RpcError, match="invalid_pagination"):
         await refresh(guard, "resources")
+
+
+async def test_resource_inventory_skips_tool_only_servers(tmp_path):
+    guard = await make(tmp_path)
+
+    class ToolOnly:
+        async def request(self, method, params):
+            if method == "initialize":
+                return {
+                    "protocolVersion": params["protocolVersion"],
+                    "capabilities": {"tools": {}},
+                }
+            raise AssertionError("resource calls must not reach a tool-only server")
+
+        async def close(self):
+            pass
+
+    await guard.close()
+    upstream = await StdioUpstream(
+        [sys.executable, "-m", "mcp_guard.demo_server"]
+    ).start()
+    guard.upstreams = {"demo": upstream, "toolsonly": ToolOnly()}
+    guard.initialized = False
+    try:
+        await guard.handle(request("initialize", INITIALIZE))
+        listing = await guard.handle(request("resources/list"))
+        assert len(listing["result"]["resources"]) == 1
+    finally:
+        await guard.close()
