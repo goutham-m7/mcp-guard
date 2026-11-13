@@ -12,8 +12,9 @@ Python 3.12, asyncio, aiohttp, httpx, PyYAML and JSON Schema. Small modules own
 policy, detection, JSON-RPC, transports, audit and reproducible evaluation.
 Implement MCP's tools profile directly instead of adopting the SDK: the trust
 boundary and wire validation remain visible and interview-defensible. MCP versions
-2024-11-05, 2025-03-26 and 2025-06-18 are negotiated; only tools capabilities are
-advertised. Resources/prompts/sampling/elicitation are deliberately unsupported.
+2024-11-05, 2025-03-26 and 2025-06-18 are negotiated. Tools are always advertised;
+text resources and prompts are opt-in through policy. Sampling/elicitation remain disabled.
+See [v0.2 design](docs/v0.2-design.md) for namespaces, inheritance and failure behavior.
 Stdio uses newline-delimited JSON, not LSP Content-Length framing. Streamable HTTP
 accepts JSON or SSE POST responses; downstream GET supports notification SSE.
 Legacy HTTP+SSE endpoint discovery and event replay/resumption are out of scope.

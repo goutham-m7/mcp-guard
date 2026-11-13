@@ -7,6 +7,7 @@ import re
 
 import jsonschema
 
+from . import __version__
 from .policy import Denied
 from .rpc import MAX_BYTES, VERSIONS, RpcError, error, result, validate_request
 from .state import fingerprint
@@ -162,7 +163,7 @@ class Guard:
                     {
                         "protocolVersion": version,
                         "capabilities": {},
-                        "clientInfo": {"name": "mcp-guard", "version": "0.1.0"},
+                        "clientInfo": {"name": "mcp-guard", "version": __version__},
                     },
                 )
                 if info.get("protocolVersion") not in VERSIONS:
@@ -182,7 +183,7 @@ class Guard:
                         if s in self.policy.config
                     },
                 },
-                "serverInfo": {"name": "mcp-guard", "version": "0.1.0"},
+                "serverInfo": {"name": "mcp-guard", "version": __version__},
             }
         if not self.initialized:
             raise RpcError(-32000, "not_initialized")
