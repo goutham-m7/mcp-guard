@@ -10,6 +10,7 @@ from pathlib import Path
 from aiohttp import web
 
 from .audit_query import AuditQueryError, query_audit
+from .benchmark import benchmark
 from .config import Config
 from .corpus import load_corpus
 from .evaluation import evaluate, replay, summary
@@ -70,6 +71,12 @@ def parser():
         prog="mcp-guard", description="Default-deny security proxy for MCP tools"
     )
     commands = root.add_subparsers(dest="command", required=True)
+    bench = commands.add_parser(
+        "benchmark", help="measure concurrent local stdio calls"
+    )
+    bench.add_argument("--sessions", type=int, default=4)
+    bench.add_argument("--requests", type=int, default=100, help="calls per session")
+    bench.add_argument("--directory", default=".guard/benchmark")
     audit = commands.add_parser("audit", help="query versioned JSONL exports")
     audit_commands = audit.add_subparsers(dest="audit_command", required=True)
     query = audit_commands.add_parser("query")
@@ -129,6 +136,14 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        if args.command == "benchmark":
+            report = asyncio.run(
+                benchmark(
+                    args.directory, sessions=args.sessions, requests=args.requests
+                )
+            )
+            print(json.dumps(report, indent=2))
+            return int(report["errors"] > 0)
         if args.command == "audit":
             rows = query_audit(
                 args.path,
