@@ -15,6 +15,7 @@ def response_value(message, request_id):
         not isinstance(message, dict)
         or message.get("jsonrpc") != "2.0"
         or message.get("id") != request_id
+        or type(message.get("id")) is not type(request_id)
         or ("result" in message) == ("error" in message)
     ):
         raise RpcError(-32002, "invalid_upstream_response")
@@ -112,6 +113,7 @@ class StdioUpstream:
 class HttpUpstream:
     def __init__(self, url, headers=None, timeout=15):
         self.url, self.session = url, None
+        self.timeout = timeout
         self.client = httpx.AsyncClient(
             timeout=timeout, headers=headers, follow_redirects=False
         )
@@ -177,25 +179,30 @@ class HttpUpstream:
         async with self.lock:
             self.counter += 1
             try:
-                value = await self._post(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": self.counter,
-                        "method": method,
-                        "params": params or {},
-                    }
-                )
+                async with asyncio.timeout(self.timeout):
+                    value = await self._post(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": self.counter,
+                            "method": method,
+                            "params": params or {},
+                        }
+                    )
                 if method == "initialize":
                     self.version = value["protocolVersion"]
                 return value
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, TimeoutError) as exc:
                 raise RpcError(-32002, "upstream_http_error") from exc
 
     async def notify(self, method, params=None):
         async with self.lock:
-            await self._post(
-                {"jsonrpc": "2.0", "method": method, "params": params or {}}
-            )
+            try:
+                async with asyncio.timeout(self.timeout):
+                    await self._post(
+                        {"jsonrpc": "2.0", "method": method, "params": params or {}}
+                    )
+            except (httpx.HTTPError, TimeoutError) as exc:
+                raise RpcError(-32002, "upstream_http_error") from exc
 
     async def close(self):
         if self.session:
