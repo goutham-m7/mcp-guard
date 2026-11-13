@@ -31,6 +31,7 @@ class Guard:
 
     async def refresh(self):
         tools = {}
+        metadata_bytes = 0
         for server, upstream in self.upstreams.items():
             cursor, seen = None, set()
             for _ in range(100):
@@ -52,6 +53,13 @@ class Guard:
                     name = f"{server}__{tool['name']}"
                     if name in tools:
                         raise RpcError(-32002, "duplicate_tool")
+                    metadata_bytes += len(json.dumps(tool, ensure_ascii=False).encode())
+                    if (
+                        len(tools) >= 1024
+                        or metadata_bytes > MAX_BYTES
+                        or (name not in self.pins and len(self.pins) >= 4096)
+                    ):
+                        raise RpcError(-32002, "tool_list_limit")
                     digest = fingerprint(tool)
                     if name in self.pins and self.pins[name] != digest:
                         self.quarantined.add(name)
@@ -200,8 +208,35 @@ class Guard:
         value = await self.upstreams[server].request(
             "tools/call", {"name": tool["name"], "arguments": arguments}
         )
-        if not isinstance(value, dict) or not isinstance(value.get("content"), list):
+        if (
+            not isinstance(value, dict)
+            or not isinstance(value.get("content"), list)
+            or type(value.get("isError", False)) is not bool
+            or (
+                "structuredContent" in value
+                and not isinstance(value["structuredContent"], dict)
+            )
+        ):
             raise RpcError(-32002, "invalid_tool_result")
+        for block in value["content"]:
+            if not isinstance(block, dict) or block.get("type") not in {
+                "text",
+                "resource",
+                "image",
+                "audio",
+                "resource_link",
+            }:
+                raise RpcError(-32002, "invalid_tool_result")
+            if block["type"] == "text" and not isinstance(block.get("text"), str):
+                raise RpcError(-32002, "invalid_tool_result")
+            if block["type"] == "resource":
+                resource = block.get("resource")
+                if (
+                    not isinstance(resource, dict)
+                    or not isinstance(resource.get("uri"), str)
+                    or not isinstance(resource.get("text", resource.get("blob")), str)
+                ):
+                    raise RpcError(-32002, "invalid_tool_result")
         findings = await self.detector.scan(value)
         if findings:
             raise Denied("output_" + findings[0])
