@@ -65,6 +65,7 @@ class Audit:
 
     def record(self, method, decision, findings, message):
         event = {
+            "schema_version": 1,
             "time": time.time(),
             "method": method[:200],
             "decision": decision,

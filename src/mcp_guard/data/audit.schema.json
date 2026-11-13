@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP Guard audit event v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "time",
+    "method",
+    "decision",
+    "findings",
+    "sha256"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "time": {
+      "type": "number",
+      "minimum": 0
+    },
+    "method": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "decision": {
+      "enum": [
+        "allowed",
+        "blocked",
+        "error"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from aiohttp import web
 
+from .audit_query import AuditQueryError, query_audit
 from .config import Config
 from .corpus import load_corpus
 from .evaluation import evaluate, replay, summary
@@ -69,6 +70,16 @@ def parser():
         prog="mcp-guard", description="Default-deny security proxy for MCP tools"
     )
     commands = root.add_subparsers(dest="command", required=True)
+    audit = commands.add_parser("audit", help="query versioned JSONL exports")
+    audit_commands = audit.add_subparsers(dest="audit_command", required=True)
+    query = audit_commands.add_parser("query")
+    query.add_argument("path")
+    query.add_argument("--decision", choices=["allowed", "blocked", "error"])
+    query.add_argument("--method")
+    query.add_argument("--reason")
+    query.add_argument("--since", type=float, help="inclusive Unix seconds")
+    query.add_argument("--until", type=float, help="inclusive Unix seconds")
+    query.add_argument("--limit", type=int, default=100)
     policy = commands.add_parser("policy", help="offline policy tools")
     policy_commands = policy.add_subparsers(dest="policy_command", required=True)
     check = policy_commands.add_parser("check", help="validate and lint a YAML policy")
@@ -118,6 +129,19 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        if args.command == "audit":
+            rows = query_audit(
+                args.path,
+                decision=args.decision,
+                method=args.method,
+                reason=args.reason,
+                since=args.since,
+                until=args.until,
+                limit=args.limit,
+            )
+            for row in rows:
+                print(json.dumps(row, separators=(",", ":")))
+            return 0
         if args.command == "policy":
             report = check_policy(args.path)
             if args.json:
@@ -165,6 +189,9 @@ def main():
                 or report["false_positives"] > 0
                 or report["errors"] > 0
             )
+    except AuditQueryError as exc:
+        print(f"mcp-guard: {exc}", file=sys.stderr)
+        return 2
     except (OSError, ValueError, KeyError, RpcError) as exc:
         # No exception payloads: upstream configuration may contain credentials.
         print(
