@@ -67,18 +67,22 @@ SCHEMA = {
     },
 }
 
+for section in ("servers", "resources", "prompts"):
+    SCHEMA["properties"][section] = SCHEMA["properties"]["tools"]
+
 
 class Policy:
     def __init__(self, config):
         try:
             jsonschema.validate(config, SCHEMA)
-            for rule in config["tools"]:
-                for constraints in rule.get("arguments", {}).values():
-                    if "regex" in constraints:
-                        re.compile(constraints["regex"])
-                    for path in constraints.get("paths", []):
-                        if not Path(path).is_absolute():
-                            raise ValueError("policy roots must be absolute")
+            for rules in config.values():
+                for rule in rules:
+                    for constraints in rule.get("arguments", {}).values():
+                        if "regex" in constraints:
+                            re.compile(constraints["regex"])
+                        for path in constraints.get("paths", []):
+                            if not Path(path).is_absolute():
+                                raise ValueError("policy roots must be absolute")
         except (jsonschema.ValidationError, re.error) as exc:
             raise ValueError("invalid policy") from exc
         self.config = config
@@ -88,14 +92,29 @@ class Policy:
     def load(cls, path):
         return cls(yaml.safe_load(Path(path).read_text()))
 
-    def check(self, name, arguments, *, now=None):
-        rules = [
-            (i, r)
-            for i, r in enumerate(self.config["tools"])
+    def matching(self, name, *, surface="tools", server=None):
+        server = server if server is not None else name.split("__", 1)[0]
+        leaves = [
+            ((surface, i, name), r)
+            for i, r in enumerate(self.config.get(surface, []))
             if fnmatchcase(name, r["match"])
         ]
-        if not rules or any(not r["allow"] for _, r in rules):
-            raise Denied("tool_denied")
+        parents = [
+            (("servers", i, server), r)
+            for i, r in enumerate(self.config.get("servers", []))
+            if fnmatchcase(server, r["match"])
+        ]
+        return leaves, parents
+
+    def visible(self, name, *, surface="tools", server=None):
+        leaves, parents = self.matching(name, surface=surface, server=server)
+        return bool(leaves) and all(r["allow"] for _, r in leaves + parents)
+
+    def check(self, name, arguments, *, now=None, surface="tools", server=None):
+        leaves, parents = self.matching(name, surface=surface, server=server)
+        rules = leaves + parents
+        if not leaves or any(not r["allow"] for _, r in rules):
+            raise Denied("tool_denied" if surface == "tools" else surface + "_denied")
         now = time.monotonic() if now is None else now
         for index, rule in rules:
             for key, constraints in rule.get("arguments", {}).items():
@@ -146,12 +165,12 @@ class Policy:
                         raise Denied("argument_url") from exc
             if "rate" in rule:
                 rate = rule["rate"]
-                window = self.windows[(index, name)]
+                window = self.windows[index]
                 while window and window[0] <= now - rate["seconds"]:
                     window.popleft()
                 if len(window) >= rate["calls"]:
                     raise Denied("rate_limit")
         for index, rule in rules:
             if "rate" in rule:
-                self.windows[(index, name)].append(now)
+                self.windows[index].append(now)
         return any(r.get("confirm", False) for _, r in rules)

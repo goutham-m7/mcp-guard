@@ -4,7 +4,6 @@ import asyncio
 import copy
 import json
 import re
-from fnmatch import fnmatchcase
 
 import jsonschema
 
@@ -184,12 +183,7 @@ class Guard:
                 raise RpcError(-32602, "pagination_not_required")
             visible = []
             for name, (_, tool) in self.tools.items():
-                matching = [
-                    r
-                    for r in self.policy.config["tools"]
-                    if fnmatchcase(name, r["match"])
-                ]
-                if matching and all(r["allow"] for r in matching):
+                if self.policy.visible(name):
                     visible.append({**tool, "name": name})
             return {"tools": visible}
         name, arguments = params.get("name"), params.get("arguments", {})
