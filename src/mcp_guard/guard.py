@@ -1,0 +1,167 @@
+"""The trust boundary: validate, pin metadata, constrain, execute, inspect."""
+import asyncio
+import copy
+import json
+import re
+from fnmatch import fnmatchcase
+
+import jsonschema
+
+from .policy import Denied
+from .rpc import MAX_BYTES, VERSIONS, RpcError, error, result, validate_request
+from .state import fingerprint
+
+
+class Guard:
+    def __init__(self, upstreams, policy, detector, audit, approvals):
+        if not upstreams or any(not re.fullmatch(r"[a-zA-Z0-9-]+", n) for n in upstreams):
+            raise ValueError("invalid server names")
+        self.upstreams, self.policy, self.detector = upstreams, policy, detector
+        self.audit, self.approvals = audit, approvals
+        self.pins, self.quarantined, self.tools = {}, set(), {}
+        self.initialized = False
+        self.lock = asyncio.Lock()
+        self.events = asyncio.Queue(maxsize=100)
+
+    async def close(self):
+        await asyncio.gather(*(u.close() for u in self.upstreams.values()))
+
+    async def refresh(self):
+        tools = {}
+        for server, upstream in self.upstreams.items():
+            cursor, seen = None, set()
+            for _ in range(100):
+                listing = await upstream.request("tools/list", {"cursor": cursor} if cursor else {})
+                if not isinstance(listing, dict) or not isinstance(listing.get("tools"), list):
+                    raise RpcError(-32002, "invalid_tool_list")
+                for tool in listing["tools"]:
+                    if (not isinstance(tool, dict) or not isinstance(tool.get("name"), str)
+                            or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", tool["name"])
+                            or not isinstance(tool.get("inputSchema"), dict)):
+                        raise RpcError(-32002, "invalid_tool_metadata")
+                    name = f"{server}__{tool['name']}"
+                    if name in tools:
+                        raise RpcError(-32002, "duplicate_tool")
+                    digest = fingerprint(tool)
+                    if name in self.pins and self.pins[name] != digest:
+                        self.quarantined.add(name)
+                        raise Denied("rug_pull")
+                    if name in self.quarantined:
+                        raise Denied("tool_quarantined")
+                    findings = await self.detector.scan(tool)
+                    if findings:
+                        self.quarantined.add(name)
+                        raise Denied("metadata_" + findings[0])
+                    try:
+                        jsonschema.Draft202012Validator.check_schema(tool["inputSchema"])
+                    except jsonschema.SchemaError as exc:
+                        raise RpcError(-32002, "invalid_tool_schema") from exc
+                    # External schema retrieval crosses another trust boundary: reject refs.
+                    if contains_ref(tool["inputSchema"]):
+                        raise RpcError(-32002, "schema_references_disabled")
+                    self.pins[name] = digest
+                    tools[name] = (server, copy.deepcopy(tool))
+                cursor = listing.get("nextCursor")
+                if cursor is None:
+                    break
+                if not isinstance(cursor, str) or cursor in seen:
+                    raise RpcError(-32002, "invalid_pagination")
+                seen.add(cursor)
+            else:
+                raise RpcError(-32002, "pagination_limit")
+            while upstream.notifications:
+                upstream.notifications.popleft()
+                if not self.events.full():
+                    self.events.put_nowait({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        self.tools = tools
+
+    async def handle(self, message):
+        async with self.lock:
+            request_id = message.get("id") if isinstance(message, dict) and type(message.get("id")) in (int, str) else None
+            method, findings, decision = "invalid", [], "allowed"
+            try:
+                validate_request(message)
+                method = message["method"]
+                if len(json.dumps(message, allow_nan=False).encode()) > MAX_BYTES:
+                    raise RpcError(-32600, "message_too_large")
+                value = await self.dispatch(method, message.get("params", {}), "id" in message)
+                response = result(request_id, value)
+            except Denied as exc:
+                decision, findings = "blocked", [str(exc)]
+                response = error(request_id, -32001, str(exc))
+            except RpcError as exc:
+                decision, findings = "error", [exc.reason]
+                response = error(request_id, exc.code, exc.reason)
+            except Exception:
+                decision, findings = "error", ["internal_or_upstream_error"]
+                response = error(request_id, -32603, "internal_or_upstream_error")
+            # Audit failure is fail-closed: never return a successful unlogged call.
+            try:
+                self.audit.record(method, decision, findings, message)
+            except (OSError, ValueError, TypeError):
+                response = error(request_id, -32603, "audit_unavailable")
+            return response if not isinstance(message, dict) or "id" in message or method == "invalid" else None
+
+    async def dispatch(self, method, params, has_id):
+        if not has_id:
+            if method == "notifications/initialized" and self.initialized:
+                for upstream in self.upstreams.values():
+                    await upstream.notify(method)
+                return None
+            if method == "notifications/cancelled":
+                return None  # Serial calls cannot be cancelled; never forward an untrusted ID.
+            raise RpcError(-32600, "unsupported_notification")
+        if method == "initialize":
+            if self.initialized:
+                raise RpcError(-32600, "already_initialized")
+            version = params.get("protocolVersion")
+            if version not in VERSIONS:
+                raise RpcError(-32602, "unsupported_protocol_version")
+            for upstream in self.upstreams.values():
+                info = await upstream.request(method, {"protocolVersion": version, "capabilities": {}, "clientInfo": {"name": "mcp-guard", "version": "0.1.0"}})
+                if info.get("protocolVersion") != version:
+                    raise RpcError(-32002, "upstream_protocol_mismatch")
+            self.initialized = True
+            return {"protocolVersion": version, "capabilities": {"tools": {"listChanged": True}}, "serverInfo": {"name": "mcp-guard", "version": "0.1.0"}}
+        if not self.initialized:
+            raise RpcError(-32000, "not_initialized")
+        if method == "ping":
+            return {}
+        if method not in {"tools/list", "tools/call"}:
+            raise RpcError(-32601, "method_not_supported")
+        await self.refresh()
+        if method == "tools/list":
+            if params:
+                raise RpcError(-32602, "pagination_not_required")
+            visible = []
+            for name, (_, tool) in self.tools.items():
+                matching = [r for r in self.policy.config["tools"] if fnmatchcase(name, r["match"])]
+                if matching and all(r["allow"] for r in matching):
+                    visible.append({**tool, "name": name})
+            return {"tools": visible}
+        name, arguments = params.get("name"), params.get("arguments", {})
+        if not isinstance(name, str) or not isinstance(arguments, dict):
+            raise RpcError(-32602, "invalid_arguments")
+        if name not in self.tools:
+            raise Denied("unknown_tool")
+        server, tool = self.tools[name]
+        try:
+            jsonschema.Draft202012Validator(tool["inputSchema"]).validate(arguments)
+        except jsonschema.ValidationError as exc:
+            raise RpcError(-32602, "invalid_arguments") from exc
+        confirmation = self.policy.check(name, arguments)
+        if confirmation and not self.approvals.consume(name, arguments):
+            raise Denied("confirmation_required")
+        value = await self.upstreams[server].request("tools/call", {"name": tool["name"], "arguments": arguments})
+        if not isinstance(value, dict) or not isinstance(value.get("content"), list):
+            raise RpcError(-32002, "invalid_tool_result")
+        findings = await self.detector.scan(value)
+        if findings:
+            raise Denied("output_" + findings[0])
+        return value
+
+
+def contains_ref(value):
+    if isinstance(value, dict):
+        return any(key in {"$ref", "$dynamicRef", "$recursiveRef"} or contains_ref(item) for key, item in value.items())
+    return isinstance(value, list) and any(contains_ref(item) for item in value)
