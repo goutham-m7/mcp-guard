@@ -29,6 +29,8 @@ def create_app(config, token, audit_path, approvals_path):
         return await handler(request)
 
     async def handler(request):
+        if request.method not in {"POST", "GET", "DELETE"}:
+            raise web.HTTPMethodNotAllowed(request.method, ["POST", "GET", "DELETE"])
         async with creation_lock:
             for sid, (guard, touched, _) in list(sessions.items()):
                 if time.monotonic() - touched > 600:

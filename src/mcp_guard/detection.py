@@ -58,12 +58,27 @@ def has_binary(value):
     return isinstance(value, list) and any(has_binary(v) for v in value)
 
 
+def text_values(value):
+    """Scan actual strings, not JSON escapes that hide whitespace."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from text_values(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from text_values(item)
+    else:
+        yield str(value)
+
+
 class Detector:
     def __init__(self, classifier: Classifier | None = None):
         self.classifier = classifier
 
     async def scan(self, value):
-        text = unicodedata.normalize("NFKC", json.dumps(value, ensure_ascii=False))
+        text = unicodedata.normalize("NFKC", "\n".join(text_values(value)))
         text = "".join(c for c in text if unicodedata.category(c) != "Cf")
         findings = [code for code, pattern in PATTERNS.items() if pattern.search(text)]
         if any(luhn(m.group()) for m in re.finditer(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)", text)):
