@@ -6,7 +6,7 @@ Local-only delivery. No remote operations, tags or publication.
 
 ### 01. Conjunctive server policy inheritance
 
-Status: planned.
+Status: complete. Delivery range: `7162306..f926d1b`.
 
 Problem: Repeated per-tool restrictions drift between servers.
 
@@ -16,7 +16,7 @@ Test plan: Unit tests for narrowing, deny, shared rate windows and default denia
 
 ### 02. Offline policy lint command
 
-Status: planned.
+Status: complete. Delivery range: `f926d1b..4c6bb0d`.
 
 Problem: Configuration errors currently surface only when a proxy starts.
 
@@ -26,7 +26,7 @@ Test plan: CLI tests for valid, malformed, duplicate, broad and contradictory ru
 
 ### 03. Guard text resources and prompts
 
-Status: planned.
+Status: complete. Delivery ranges: `4c6bb0d..151d7bc`, `020b9c8..126d789`, `b8214d3..2c80dc8`.
 
 Problem: Tools-only guards leave useful MCP read surfaces unavailable.
 
@@ -36,7 +36,7 @@ Test plan: Real subprocess journeys plus hostile metadata/output, invalid shape,
 
 ### 04. Freeze an independent synthetic holdout
 
-Status: planned.
+Status: complete. Delivery range: `151d7bc..8f60b8d` (holdout freeze: `4e34e37`).
 
 Problem: The existing corpus was authored alongside detector rules.
 
@@ -46,7 +46,7 @@ Test plan: Assert disjoint IDs and payloads; replay all held-out cases through r
 
 ### 05. Expand benign coverage and report detector false positives
 
-Status: planned.
+Status: complete. Delivery range: `8f60b8d..c2e6900`.
 
 Problem: Eleven benign fixtures underrepresent ordinary technical text.
 
@@ -56,7 +56,7 @@ Test plan: Replay benign fixtures; verify per-detector counts and empty split su
 
 ### 06. Version audit JSONL and add query CLI
 
-Status: planned.
+Status: complete. Delivery range: `c2e6900..6e93c0f`.
 
 Problem: Local logs lack a stable export contract and focused filtering.
 
@@ -66,7 +66,7 @@ Test plan: Schema, privacy, filtering, malformed-line and CLI tests against real
 
 ### 07. Measure concurrent guarded call latency
 
-Status: planned.
+Status: complete. Delivery range: `6e93c0f..020b9c8`.
 
 Problem: Sequential attack replay is not a concurrency benchmark.
 
@@ -76,7 +76,7 @@ Test plan: Real subprocess harness tests; run measured concurrency samples with 
 
 ### 08. Build and verify v0.2.0 distributions
 
-Status: planned.
+Status: release build implemented in `126d789..b8214d3`; fresh-clone verification pending.
 
 Problem: The next release needs installable artifacts and reproducible evidence.
 
