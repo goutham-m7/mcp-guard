@@ -199,3 +199,21 @@ async def test_resource_inventory_skips_tool_only_servers(tmp_path):
         assert len(listing["result"]["resources"]) == 1
     finally:
         await guard.close()
+
+
+async def test_tool_discovery_skips_resource_only_servers(tmp_path):
+    guard = await make(tmp_path)
+
+    class ResourceOnly:
+        async def request(self, method, params):
+            raise AssertionError("tools/list must not reach resource-only servers")
+
+        async def close(self):
+            pass
+
+    guard.upstreams["resourcesonly"] = ResourceOnly()
+    guard.upstream_capabilities["resourcesonly"] = {"resources": {}}
+    try:
+        assert (await guard.handle(request("tools/list")))["result"] == {"tools": []}
+    finally:
+        await guard.close()

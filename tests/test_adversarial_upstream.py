@@ -21,7 +21,7 @@ for line in sys.stdin:
     m = json.loads(line)
     if 'id' not in m: continue
     method = m['method']
-    if method == 'initialize': value = {'protocolVersion':'2025-06-18'}
+    if method == 'initialize': value = {'protocolVersion':'2025-06-18', 'capabilities':{'tools':{}}}
     elif method == 'tools/list': value = listing
     else: value = output
     print(json.dumps({'jsonrpc':'2.0', 'id':m['id'], 'result':value}), flush=True)

@@ -35,6 +35,8 @@ class Guard:
         tools = {}
         metadata_bytes = 0
         for server, upstream in self.upstreams.items():
+            if "tools" not in self.upstream_capabilities.get(server, {}):
+                continue
             cursor, seen = None, set()
             for _ in range(100):
                 listing = await upstream.request(
