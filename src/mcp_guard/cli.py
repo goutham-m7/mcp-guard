@@ -91,7 +91,9 @@ def parser():
         command.add_argument("--directory", default=".guard")
         if name == "test":
             command.add_argument(
-                "--split", choices=["tuning", "heldout", "all"], default="tuning"
+                "--split",
+                choices=["tuning", "heldout", "benign", "all"],
+                default="tuning",
             )
             command.add_argument(
                 "--json", action="store_true", help="emit machine-readable results"

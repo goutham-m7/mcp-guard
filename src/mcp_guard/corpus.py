@@ -5,7 +5,11 @@ from importlib.resources import files
 
 
 def load_corpus(split="tuning"):
-    filenames = {"tuning": "corpus.json", "heldout": "heldout.json"}
+    filenames = {
+        "tuning": "corpus.json",
+        "heldout": "heldout.json",
+        "benign": "benign.json",
+    }
     if split == "all":
         return [case for part in filenames for case in load_corpus(part)]
     if split not in filenames:

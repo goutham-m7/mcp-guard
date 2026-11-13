@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .corpus import demo_policy
-from .detection import Detector
+from .detection import PATTERNS, Detector
 from .guard import Guard
 from .policy import Policy
 from .state import Approvals, Audit
@@ -74,6 +74,7 @@ async def replay(case, directory):
             "blocked": code == -32001,
             "error": code is not None and code != -32001,
             "reason": response.get("error", {}).get("message", "allowed"),
+            "detector_findings": await guard.detector.scan(case["payload"]),
             "ms": elapsed,
         }
     finally:
@@ -97,6 +98,13 @@ async def evaluate(cases, directory):
         "errors": sum(r["error"] for r in rows),
         "raw_delivered": sum(r["raw_delivered"] for r in rows),
         "categories": dict(sorted(categories.items())),
+        "detector_false_positives": {
+            code: {
+                "hits": sum(code in r["detector_findings"] for r in benign),
+                "total": len(benign),
+            }
+            for code in (*PATTERNS, "card", "unscannable")
+        },
         "latency_ms": {
             "median": round(statistics.median(times), 3) if times else 0,
             "p95": round(times[math.ceil(len(times) * 0.95) - 1], 3) if times else 0,
@@ -119,6 +127,10 @@ def summary(report):
     ]
     for category, counts in report["categories"].items():
         lines.append(f"  {category}: {counts['blocked']}/{counts['total']}")
+    if "detector_false_positives" in report:
+        lines.append("Benign payload detector hits (overlapping):")
+        for code, counts in report["detector_false_positives"].items():
+            lines.append(f"  {code}: {counts['hits']}/{counts['total']}")
     lines.append(
         f"Guarded list+call latency (excludes process startup): median {report['latency_ms']['median']:.3f} ms; p95 {report['latency_ms']['p95']:.3f} ms"
     )
