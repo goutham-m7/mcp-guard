@@ -1,0 +1,6 @@
+# Start: uv run python -m mcp_guard.demo_server --http 8766 --sse
+servers:
+  demo:
+    url: http://127.0.0.1:8766/mcp
+    # token_env: UPSTREAM_TOKEN  # optional operator-selected env var
+policy: policy.yaml

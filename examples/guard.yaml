@@ -1,0 +1,7 @@
+# Run commands from the repository root. No shell invocation.
+servers:
+  demo:
+    command: ["uv", "run", "python", "-m", "mcp_guard.demo_server", "--case", "injection-ignore"]
+policy: policy.yaml
+# Optional offline classifier (heuristics still run):
+# classifier: {provider: mock}

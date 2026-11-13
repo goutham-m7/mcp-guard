@@ -1,10 +1,11 @@
 """Operator-authored, default-deny, conjunctive tool policy."""
-from collections import defaultdict, deque
-from fnmatch import fnmatchcase
-from pathlib import Path
+
 import ipaddress
 import re
 import time
+from collections import defaultdict, deque
+from fnmatch import fnmatchcase
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import jsonschema
@@ -16,19 +17,54 @@ class Denied(ValueError):
 
 
 SCHEMA = {
-    "type": "object", "required": ["tools"], "additionalProperties": False,
-    "properties": {"tools": {"type": "array", "items": {
-        "type": "object", "required": ["match", "allow"], "additionalProperties": False,
-        "properties": {
-            "match": {"type": "string", "minLength": 1}, "allow": {"type": "boolean"},
-            "confirm": {"type": "boolean"},
-            "rate": {"type": "object", "required": ["calls", "seconds"], "additionalProperties": False,
-                     "properties": {"calls": {"type": "integer", "minimum": 1}, "seconds": {"type": "number", "exclusiveMinimum": 0}}},
-            "arguments": {"type": "object", "additionalProperties": {
-                "type": "object", "minProperties": 1, "additionalProperties": False,
-                "properties": {"regex": {"type": "string"}, "paths": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "domains": {"type": "array", "minItems": 1, "items": {"type": "string"}}}}}
+    "type": "object",
+    "required": ["tools"],
+    "additionalProperties": False,
+    "properties": {
+        "tools": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["match", "allow"],
+                "additionalProperties": False,
+                "properties": {
+                    "match": {"type": "string", "minLength": 1},
+                    "allow": {"type": "boolean"},
+                    "confirm": {"type": "boolean"},
+                    "rate": {
+                        "type": "object",
+                        "required": ["calls", "seconds"],
+                        "additionalProperties": False,
+                        "properties": {
+                            "calls": {"type": "integer", "minimum": 1},
+                            "seconds": {"type": "number", "exclusiveMinimum": 0},
+                        },
+                    },
+                    "arguments": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "minProperties": 1,
+                            "additionalProperties": False,
+                            "properties": {
+                                "regex": {"type": "string"},
+                                "paths": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {"type": "string"},
+                                },
+                                "domains": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         }
-    }}}
+    },
 }
 
 
@@ -53,7 +89,11 @@ class Policy:
         return cls(yaml.safe_load(Path(path).read_text()))
 
     def check(self, name, arguments, *, now=None):
-        rules = [(i, r) for i, r in enumerate(self.config["tools"]) if fnmatchcase(name, r["match"])]
+        rules = [
+            (i, r)
+            for i, r in enumerate(self.config["tools"])
+            if fnmatchcase(name, r["match"])
+        ]
         if not rules or any(not r["allow"] for _, r in rules):
             raise Denied("tool_denied")
         now = time.monotonic() if now is None else now
@@ -62,22 +102,39 @@ class Policy:
                 value = arguments.get(key)
                 if not isinstance(value, str) or len(value) > 8192:
                     raise Denied("argument_constraint")
-                if "regex" in constraints and re.fullmatch(constraints["regex"], value) is None:
+                if (
+                    "regex" in constraints
+                    and re.fullmatch(constraints["regex"], value) is None
+                ):
                     raise Denied("argument_regex")
                 if "paths" in constraints:
                     path = Path(value)
                     decoded = unquote(value)
-                    if not path.is_absolute() or ".." in Path(decoded).parts or "\\" in decoded or "%" in decoded:
+                    if (
+                        not path.is_absolute()
+                        or ".." in Path(decoded).parts
+                        or "\\" in decoded
+                        or "%" in decoded
+                    ):
                         raise Denied("argument_path")
                     resolved = path.resolve()
-                    if not any(resolved.is_relative_to(Path(root).resolve()) for root in constraints["paths"]):
+                    if not any(
+                        resolved.is_relative_to(Path(root).resolve())
+                        for root in constraints["paths"]
+                    ):
                         raise Denied("argument_path")
                 if "domains" in constraints:
                     try:
                         url = urlsplit(value)
                         host = url.hostname or ""
-                        if (url.scheme != "https" or url.username or url.password or url.port not in (None, 443)
-                                or "\\" in value or host.lower() not in constraints["domains"]):
+                        if (
+                            url.scheme != "https"
+                            or url.username
+                            or url.password
+                            or url.port not in (None, 443)
+                            or "\\" in value
+                            or host.lower() not in constraints["domains"]
+                        ):
                             raise Denied("argument_url")
                         try:
                             ipaddress.ip_address(host)

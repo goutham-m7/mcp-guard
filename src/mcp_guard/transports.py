@@ -1,8 +1,9 @@
 """Serialized, bounded stdio and Streamable HTTP/SSE upstream adapters."""
+
 import asyncio
-from collections import deque
 import json
 import os
+from collections import deque
 
 import httpx
 
@@ -10,8 +11,12 @@ from .rpc import MAX_BYTES, RpcError, decode, error
 
 
 def response_value(message, request_id):
-    if (not isinstance(message, dict) or message.get("jsonrpc") != "2.0"
-            or message.get("id") != request_id or ("result" in message) == ("error" in message)):
+    if (
+        not isinstance(message, dict)
+        or message.get("jsonrpc") != "2.0"
+        or message.get("id") != request_id
+        or ("result" in message) == ("error" in message)
+    ):
         raise RpcError(-32002, "invalid_upstream_response")
     if "error" in message:
         raise RpcError(-32002, "upstream_error")
@@ -27,11 +32,20 @@ class StdioUpstream:
         self.notifications = deque(maxlen=100)
 
     async def start(self):
-        environment = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
+        environment = {
+            key: os.environ[key]
+            for key in ("PATH", "HOME", "TMPDIR")
+            if key in os.environ
+        }
         environment.update(self.env)
-        self.process = await asyncio.create_subprocess_exec(*self.command, env=environment,
-            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, limit=MAX_BYTES + 1)
+        self.process = await asyncio.create_subprocess_exec(
+            *self.command,
+            env=environment,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            limit=MAX_BYTES + 1,
+        )
         return self
 
     async def _send(self, value):
@@ -44,7 +58,14 @@ class StdioUpstream:
             request_id = self.counter
             try:
                 async with asyncio.timeout(self.timeout):
-                    await self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}})
+                    await self._send(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": request_id,
+                            "method": method,
+                            "params": params or {},
+                        }
+                    )
                     for _ in range(100):
                         raw = await self.process.stdout.readline()
                         if not raw:
@@ -52,9 +73,19 @@ class StdioUpstream:
                         message = decode(raw)
                         if isinstance(message, dict) and "method" in message:
                             if "id" in message:
-                                await self._send(error(message["id"], -32601, "server_requests_disabled"))
-                            elif message["method"] == "notifications/tools/list_changed":
-                                self.notifications.append({"jsonrpc": "2.0", "method": message["method"]})
+                                await self._send(
+                                    error(
+                                        message["id"],
+                                        -32601,
+                                        "server_requests_disabled",
+                                    )
+                                )
+                            elif (
+                                message["method"] == "notifications/tools/list_changed"
+                            ):
+                                self.notifications.append(
+                                    {"jsonrpc": "2.0", "method": message["method"]}
+                                )
                             continue
                         return response_value(message, request_id)
                     raise RpcError(-32002, "upstream_message_limit")
@@ -64,7 +95,9 @@ class StdioUpstream:
 
     async def notify(self, method, params=None):
         async with self.lock:
-            await self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
+            await self._send(
+                {"jsonrpc": "2.0", "method": method, "params": params or {}}
+            )
 
     async def close(self):
         if self.process and self.process.returncode is None:
@@ -79,7 +112,9 @@ class StdioUpstream:
 class HttpUpstream:
     def __init__(self, url, headers=None, timeout=15):
         self.url, self.session = url, None
-        self.client = httpx.AsyncClient(timeout=timeout, headers=headers, follow_redirects=False)
+        self.client = httpx.AsyncClient(
+            timeout=timeout, headers=headers, follow_redirects=False
+        )
         self.lock, self.counter = asyncio.Lock(), 0
         self.version = "2025-06-18"
         self.notifications = deque(maxlen=100)
@@ -88,13 +123,18 @@ class HttpUpstream:
         return self
 
     def headers(self):
-        headers = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": self.version}
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": self.version,
+        }
         if self.session:
             headers["Mcp-Session-Id"] = self.session
         return headers
 
     async def _post(self, message):
-        async with self.client.stream("POST", self.url, headers=self.headers(), json=message) as response:
+        async with self.client.stream(
+            "POST", self.url, headers=self.headers(), json=message
+        ) as response:
             response.raise_for_status()
             if session := response.headers.get("Mcp-Session-Id"):
                 self.session = session
@@ -102,7 +142,10 @@ class HttpUpstream:
                 if "id" in message:
                     raise RpcError(-32002, "missing_upstream_response")
                 return None
-            is_sse = response.headers.get("content-type", "").split(";")[0] == "text/event-stream"
+            is_sse = (
+                response.headers.get("content-type", "").split(";")[0]
+                == "text/event-stream"
+            )
             total, body, data = 0, bytearray(), []
             if is_sse:
                 async for line in response.aiter_lines():
@@ -118,7 +161,9 @@ class HttpUpstream:
                             if "id" in event:
                                 raise RpcError(-32002, "server_requests_disabled")
                             if event["method"] == "notifications/tools/list_changed":
-                                self.notifications.append({"jsonrpc": "2.0", "method": event["method"]})
+                                self.notifications.append(
+                                    {"jsonrpc": "2.0", "method": event["method"]}
+                                )
                             continue
                         return response_value(event, message.get("id"))
                 raise RpcError(-32002, "incomplete_sse_response")
@@ -132,7 +177,14 @@ class HttpUpstream:
         async with self.lock:
             self.counter += 1
             try:
-                value = await self._post({"jsonrpc": "2.0", "id": self.counter, "method": method, "params": params or {}})
+                value = await self._post(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": self.counter,
+                        "method": method,
+                        "params": params or {},
+                    }
+                )
                 if method == "initialize":
                     self.version = value["protocolVersion"]
                 return value
@@ -141,7 +193,9 @@ class HttpUpstream:
 
     async def notify(self, method, params=None):
         async with self.lock:
-            await self._post({"jsonrpc": "2.0", "method": method, "params": params or {}})
+            await self._post(
+                {"jsonrpc": "2.0", "method": method, "params": params or {}}
+            )
 
     async def close(self):
         if self.session:

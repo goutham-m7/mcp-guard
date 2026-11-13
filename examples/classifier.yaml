@@ -1,0 +1,10 @@
+# Opt-in: content is disclosed to this operator-selected endpoint.
+servers:
+  demo:
+    command: ["uv", "run", "python", "-m", "mcp_guard.demo_server"]
+policy: policy.yaml
+classifier:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  key_env: MCP_GUARD_LLM_KEY
+  model: gpt-4.1-mini

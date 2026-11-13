@@ -1,4 +1,5 @@
 """The trust boundary: validate, pin metadata, constrain, execute, inspect."""
+
 import asyncio
 import copy
 import json
@@ -14,7 +15,9 @@ from .state import fingerprint
 
 class Guard:
     def __init__(self, upstreams, policy, detector, audit, approvals):
-        if not upstreams or any(not re.fullmatch(r"[a-zA-Z0-9-]+", n) for n in upstreams):
+        if not upstreams or any(
+            not re.fullmatch(r"[a-zA-Z0-9-]+", n) for n in upstreams
+        ):
             raise ValueError("invalid server names")
         self.upstreams, self.policy, self.detector = upstreams, policy, detector
         self.audit, self.approvals = audit, approvals
@@ -31,13 +34,20 @@ class Guard:
         for server, upstream in self.upstreams.items():
             cursor, seen = None, set()
             for _ in range(100):
-                listing = await upstream.request("tools/list", {"cursor": cursor} if cursor else {})
-                if not isinstance(listing, dict) or not isinstance(listing.get("tools"), list):
+                listing = await upstream.request(
+                    "tools/list", {"cursor": cursor} if cursor else {}
+                )
+                if not isinstance(listing, dict) or not isinstance(
+                    listing.get("tools"), list
+                ):
                     raise RpcError(-32002, "invalid_tool_list")
                 for tool in listing["tools"]:
-                    if (not isinstance(tool, dict) or not isinstance(tool.get("name"), str)
-                            or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", tool["name"])
-                            or not isinstance(tool.get("inputSchema"), dict)):
+                    if (
+                        not isinstance(tool, dict)
+                        or not isinstance(tool.get("name"), str)
+                        or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", tool["name"])
+                        or not isinstance(tool.get("inputSchema"), dict)
+                    ):
                         raise RpcError(-32002, "invalid_tool_metadata")
                     name = f"{server}__{tool['name']}"
                     if name in tools:
@@ -53,7 +63,9 @@ class Guard:
                         self.quarantined.add(name)
                         raise Denied("metadata_" + findings[0])
                     try:
-                        jsonschema.Draft202012Validator.check_schema(tool["inputSchema"])
+                        jsonschema.Draft202012Validator.check_schema(
+                            tool["inputSchema"]
+                        )
                     except jsonschema.SchemaError as exc:
                         raise RpcError(-32002, "invalid_tool_schema") from exc
                     # External schema retrieval crosses another trust boundary: reject refs.
@@ -72,19 +84,27 @@ class Guard:
             while upstream.notifications:
                 upstream.notifications.popleft()
                 if not self.events.full():
-                    self.events.put_nowait({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+                    self.events.put_nowait(
+                        {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
+                    )
         self.tools = tools
 
     async def handle(self, message):
         async with self.lock:
-            request_id = message.get("id") if isinstance(message, dict) and type(message.get("id")) in (int, str) else None
+            request_id = (
+                message.get("id")
+                if isinstance(message, dict) and type(message.get("id")) in (int, str)
+                else None
+            )
             method, findings, decision = "invalid", [], "allowed"
             try:
                 validate_request(message)
                 method = message["method"]
                 if len(json.dumps(message, allow_nan=False).encode()) > MAX_BYTES:
                     raise RpcError(-32600, "message_too_large")
-                value = await self.dispatch(method, message.get("params", {}), "id" in message)
+                value = await self.dispatch(
+                    method, message.get("params", {}), "id" in message
+                )
                 response = result(request_id, value)
             except Denied as exc:
                 decision, findings = "blocked", [str(exc)]
@@ -100,7 +120,13 @@ class Guard:
                 self.audit.record(method, decision, findings, message)
             except (OSError, ValueError, TypeError):
                 response = error(request_id, -32603, "audit_unavailable")
-            return response if not isinstance(message, dict) or "id" in message or method == "invalid" else None
+            return (
+                response
+                if not isinstance(message, dict)
+                or "id" in message
+                or method == "invalid"
+                else None
+            )
 
     async def dispatch(self, method, params, has_id):
         if not has_id:
@@ -118,11 +144,22 @@ class Guard:
             if version not in VERSIONS:
                 raise RpcError(-32602, "unsupported_protocol_version")
             for upstream in self.upstreams.values():
-                info = await upstream.request(method, {"protocolVersion": version, "capabilities": {}, "clientInfo": {"name": "mcp-guard", "version": "0.1.0"}})
+                info = await upstream.request(
+                    method,
+                    {
+                        "protocolVersion": version,
+                        "capabilities": {},
+                        "clientInfo": {"name": "mcp-guard", "version": "0.1.0"},
+                    },
+                )
                 if info.get("protocolVersion") != version:
                     raise RpcError(-32002, "upstream_protocol_mismatch")
             self.initialized = True
-            return {"protocolVersion": version, "capabilities": {"tools": {"listChanged": True}}, "serverInfo": {"name": "mcp-guard", "version": "0.1.0"}}
+            return {
+                "protocolVersion": version,
+                "capabilities": {"tools": {"listChanged": True}},
+                "serverInfo": {"name": "mcp-guard", "version": "0.1.0"},
+            }
         if not self.initialized:
             raise RpcError(-32000, "not_initialized")
         if method == "ping":
@@ -135,7 +172,11 @@ class Guard:
                 raise RpcError(-32602, "pagination_not_required")
             visible = []
             for name, (_, tool) in self.tools.items():
-                matching = [r for r in self.policy.config["tools"] if fnmatchcase(name, r["match"])]
+                matching = [
+                    r
+                    for r in self.policy.config["tools"]
+                    if fnmatchcase(name, r["match"])
+                ]
                 if matching and all(r["allow"] for r in matching):
                     visible.append({**tool, "name": name})
             return {"tools": visible}
@@ -152,7 +193,9 @@ class Guard:
         confirmation = self.policy.check(name, arguments)
         if confirmation and not self.approvals.consume(name, arguments):
             raise Denied("confirmation_required")
-        value = await self.upstreams[server].request("tools/call", {"name": tool["name"], "arguments": arguments})
+        value = await self.upstreams[server].request(
+            "tools/call", {"name": tool["name"], "arguments": arguments}
+        )
         if not isinstance(value, dict) or not isinstance(value.get("content"), list):
             raise RpcError(-32002, "invalid_tool_result")
         findings = await self.detector.scan(value)
@@ -163,5 +206,8 @@ class Guard:
 
 def contains_ref(value):
     if isinstance(value, dict):
-        return any(key in {"$ref", "$dynamicRef", "$recursiveRef"} or contains_ref(item) for key, item in value.items())
+        return any(
+            key in {"$ref", "$dynamicRef", "$recursiveRef"} or contains_ref(item)
+            for key, item in value.items()
+        )
     return isinstance(value, list) and any(contains_ref(item) for item in value)

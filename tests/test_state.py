@@ -1,7 +1,9 @@
 import json
+
 import pytest
+
+from mcp_guard.rpc import RpcError, validate_request
 from mcp_guard.state import Approvals, Audit, render_audit
-from mcp_guard.rpc import validate_request, RpcError
 
 
 def test_approval_exact_expiring_once(tmp_path):
@@ -17,7 +19,9 @@ def test_approval_exact_expiring_once(tmp_path):
 
 def test_audit_escapes_and_omits_payload(tmp_path):
     path = tmp_path / "audit.jsonl"
-    Audit(path).record("<script>alert(1)</script>", "blocked", ["email"], {"password": "private"})
+    Audit(path).record(
+        "<script>alert(1)</script>", "blocked", ["email"], {"password": "private"}
+    )
     line = path.read_text()
     assert "private" not in line and "password" not in line
     assert json.loads(line)["decision"] == "blocked"
@@ -25,7 +29,17 @@ def test_audit_escapes_and_omits_payload(tmp_path):
     assert "<script>" not in html and "&lt;script&gt;" in html
 
 
-@pytest.mark.parametrize("message", [[], {}, {"jsonrpc": "1.0", "method": "ping"}, {"jsonrpc": "2.0", "id": True, "method": "ping"}, {"jsonrpc": "2.0", "method": "tools/call", "params": []}, {"jsonrpc": "2.0", "method": "ping", "result": {}}])
+@pytest.mark.parametrize(
+    "message",
+    [
+        [],
+        {},
+        {"jsonrpc": "1.0", "method": "ping"},
+        {"jsonrpc": "2.0", "id": True, "method": "ping"},
+        {"jsonrpc": "2.0", "method": "tools/call", "params": []},
+        {"jsonrpc": "2.0", "method": "ping", "result": {}},
+    ],
+)
 def test_invalid_rpc(message):
     with pytest.raises(RpcError):
         validate_request(message)

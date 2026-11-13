@@ -1,0 +1,19 @@
+# Default deny: only matching allow rules are eligible. Deny always wins.
+tools:
+  - match: "demo__*"
+    allow: true
+    rate: {calls: 30, seconds: 60}
+  - match: "demo__admin"
+    allow: false
+  - match: "demo__read"
+    allow: true
+    arguments:
+      path: {paths: ["/workspace/public"]}
+  - match: "demo__fetch"
+    allow: true
+    arguments:
+      url: {domains: ["docs.example.test"]}
+  - match: "demo__search"
+    allow: true
+    arguments:
+      query: {regex: "[a-zA-Z0-9 ]{1,80}"}

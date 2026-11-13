@@ -1,4 +1,5 @@
 """Loopback-only authenticated MCP HTTP endpoint, isolated per client session."""
+
 import asyncio
 import contextlib
 import hmac
@@ -20,11 +21,20 @@ def create_app(config, token, audit_path, approvals_path):
 
     @web.middleware
     async def security(request, handler):
-        if urlsplit("//" + request.host).hostname not in {"127.0.0.1", "localhost", "::1"}:
+        if urlsplit("//" + request.host).hostname not in {
+            "127.0.0.1",
+            "localhost",
+            "::1",
+        }:
             raise web.HTTPForbidden(text="invalid Host")
-        if request.headers.get("Origin") not in (None, f"{request.scheme}://{request.host}"):
+        if request.headers.get("Origin") not in (
+            None,
+            f"{request.scheme}://{request.host}",
+        ):
             raise web.HTTPForbidden(text="invalid Origin")
-        if not hmac.compare_digest(request.headers.get("Authorization", ""), "Bearer " + token):
+        if not hmac.compare_digest(
+            request.headers.get("Authorization", ""), "Bearer " + token
+        ):
             raise web.HTTPUnauthorized(text="bearer token required")
         return await handler(request)
 
@@ -45,7 +55,10 @@ def create_app(config, token, audit_path, approvals_path):
             except RpcError as exc:
                 return web.json_response(error(None, exc.code, exc.reason), status=400)
             if not session_id:
-                if not isinstance(message, dict) or message.get("method") != "initialize":
+                if (
+                    not isinstance(message, dict)
+                    or message.get("method") != "initialize"
+                ):
                     raise web.HTTPBadRequest(text="initialize a session first")
                 async with creation_lock:
                     if len(sessions) >= 32:
@@ -54,7 +67,10 @@ def create_app(config, token, audit_path, approvals_path):
                     response = await guard.handle(message)
                     if response is None or "error" in response:
                         await guard.close()
-                        return web.json_response(response or error(None, -32600, "invalid_initialize"), status=400)
+                        return web.json_response(
+                            response or error(None, -32600, "invalid_initialize"),
+                            status=400,
+                        )
                     session_id = secrets.token_urlsafe(32)
                     version = response["result"]["protocolVersion"]
                     sessions[session_id] = (guard, time.monotonic(), version)
@@ -64,8 +80,14 @@ def create_app(config, token, audit_path, approvals_path):
             if response is None:
                 return web.Response(status=202)
             headers = {"Mcp-Session-Id": session_id, "Cache-Control": "no-store"}
-            if "text/event-stream" in request.headers.get("Accept", "") and "application/json" not in request.headers.get("Accept", ""):
-                return web.Response(text="event: message\ndata: " + json.dumps(response) + "\n\n", content_type="text/event-stream", headers=headers)
+            if "text/event-stream" in request.headers.get(
+                "Accept", ""
+            ) and "application/json" not in request.headers.get("Accept", ""):
+                return web.Response(
+                    text="event: message\ndata: " + json.dumps(response) + "\n\n",
+                    content_type="text/event-stream",
+                    headers=headers,
+                )
             return web.json_response(response, headers=headers)
         guard, version = get_session(request, session_id)
         if request.method == "DELETE":
@@ -74,14 +96,18 @@ def create_app(config, token, audit_path, approvals_path):
             return web.Response(status=204)
         if "text/event-stream" not in request.headers.get("Accept", ""):
             raise web.HTTPNotAcceptable()
-        stream = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-store"})
+        stream = web.StreamResponse(
+            headers={"Content-Type": "text/event-stream", "Cache-Control": "no-store"}
+        )
         await stream.prepare(request)
         try:
             await stream.write(b": mcp-guard notification stream\n\n")
             while session_id in sessions:
                 try:
                     event = await asyncio.wait_for(guard.events.get(), 15)
-                    await stream.write(("event: message\ndata: " + json.dumps(event) + "\n\n").encode())
+                    await stream.write(
+                        ("event: message\ndata: " + json.dumps(event) + "\n\n").encode()
+                    )
                 except TimeoutError:
                     await stream.write(b": keepalive\n\n")
         except (ConnectionError, asyncio.CancelledError):

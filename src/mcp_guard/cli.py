@@ -1,10 +1,11 @@
 """Local-only operator CLI. Stdout stays exclusively JSON-RPC in proxy mode."""
+
 import argparse
 import asyncio
 import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from aiohttp import web
 
@@ -34,8 +35,17 @@ async def stdio(config, audit, approvals):
 
 async def demo(directory):
     print("mcp-guard / offline synthetic attack demo")
-    print("The vulnerable server simulates acceptance; it never reads files or sends data.\n")
-    selected = {"injection-ignore", "exfil-external", "path-parent", "poison-authority", "rug-pull", "pii-email"}
+    print(
+        "The vulnerable server simulates acceptance; it never reads files or sends data.\n"
+    )
+    selected = {
+        "injection-ignore",
+        "exfil-external",
+        "path-parent",
+        "poison-authority",
+        "rug-pull",
+        "pii-email",
+    }
     for case in load_corpus():
         if case["id"] not in selected:
             continue
@@ -44,7 +54,9 @@ async def demo(directory):
         sample = case["payload"] or json.dumps(case["arguments"])
         print(f"  Payload: {sample}")
         print("  Without guard: " + ("DELIVERED" if row["raw_delivered"] else "ERROR"))
-        print(f"  With guard: {'BLOCKED' if row['blocked'] else 'ALLOWED'} ({row['reason']})")
+        print(
+            f"  With guard: {'BLOCKED' if row['blocked'] else 'ALLOWED'} ({row['reason']})"
+        )
         if not row["blocked"] or row["error"]:
             return 1
     print(f"\nAudit: {Path(directory) / 'audit.jsonl'}")
@@ -52,9 +64,13 @@ async def demo(directory):
 
 
 def parser():
-    root = argparse.ArgumentParser(prog="mcp-guard", description="Default-deny security proxy for MCP tools")
+    root = argparse.ArgumentParser(
+        prog="mcp-guard", description="Default-deny security proxy for MCP tools"
+    )
     commands = root.add_subparsers(dest="command", required=True)
-    proxy = commands.add_parser("proxy", help="bridge MCP client and configured upstreams")
+    proxy = commands.add_parser(
+        "proxy", help="bridge MCP client and configured upstreams"
+    )
     proxy.add_argument("--config", required=True)
     proxy.add_argument("--transport", choices=["stdio", "http"], default="stdio")
     proxy.add_argument("--port", type=int, default=8765)
@@ -62,16 +78,26 @@ def parser():
     proxy.add_argument("--audit", default=".guard/audit.jsonl")
     proxy.add_argument("--approvals", default=".guard/approvals.sqlite")
     for name in ("test", "demo"):
-        command = commands.add_parser(name, help="replay original offline fixtures through the real demo server")
+        command = commands.add_parser(
+            name, help="replay original offline fixtures through the real demo server"
+        )
         command.add_argument("--directory", default=".guard")
         if name == "test":
-            command.add_argument("--json", action="store_true", help="emit machine-readable results")
-    approval = commands.add_parser("approve", help="issue a local, exact-argument, one-use approval")
+            command.add_argument(
+                "--json", action="store_true", help="emit machine-readable results"
+            )
+    approval = commands.add_parser(
+        "approve", help="issue a local, exact-argument, one-use approval"
+    )
     approval.add_argument("tool")
-    approval.add_argument("--arguments", required=True, help="JSON object, must match call exactly")
+    approval.add_argument(
+        "--arguments", required=True, help="JSON object, must match call exactly"
+    )
     approval.add_argument("--ttl", type=int, default=60)
     approval.add_argument("--store", default=".guard/approvals.sqlite")
-    view = commands.add_parser("view", help="render payload-free JSONL as static escaped HTML")
+    view = commands.add_parser(
+        "view", help="render payload-free JSONL as static escaped HTML"
+    )
     view.add_argument("audit")
     view.add_argument("--output", default=".guard/audit.html")
     return root
@@ -84,7 +110,12 @@ def main():
             config = Config.load(args.config)
             if args.transport == "http":
                 token = os.environ[args.token_env]
-                web.run_app(create_app(config, token, args.audit, args.approvals), host="127.0.0.1", port=args.port, print=None)
+                web.run_app(
+                    create_app(config, token, args.audit, args.approvals),
+                    host="127.0.0.1",
+                    port=args.port,
+                    print=None,
+                )
             else:
                 asyncio.run(stdio(config, args.audit, args.approvals))
         elif args.command == "approve":
@@ -103,10 +134,17 @@ def main():
         elif args.command == "test":
             report = asyncio.run(evaluate(load_corpus(), args.directory))
             print(json.dumps(report, indent=2) if args.json else summary(report))
-            return int(report["blocked"] != report["attacks"] or report["false_positives"] > 0 or report["errors"] > 0)
+            return int(
+                report["blocked"] != report["attacks"]
+                or report["false_positives"] > 0
+                or report["errors"] > 0
+            )
     except (OSError, ValueError, KeyError, RpcError) as exc:
         # No exception payloads: upstream configuration may contain credentials.
-        print(f"mcp-guard: invalid configuration or runtime input ({type(exc).__name__})", file=sys.stderr)
+        print(
+            f"mcp-guard: invalid configuration or runtime input ({type(exc).__name__})",
+            file=sys.stderr,
+        )
         return 2
     except KeyboardInterrupt:
         return 130

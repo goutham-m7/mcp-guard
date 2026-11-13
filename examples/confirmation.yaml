@@ -1,0 +1,8 @@
+servers:
+  demo:
+    command: ["uv", "run", "python", "-m", "mcp_guard.demo_server"]
+policy:
+  tools:
+    - match: "demo__echo"
+      allow: true
+      confirm: true

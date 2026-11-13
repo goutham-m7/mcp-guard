@@ -1,6 +1,7 @@
 import pytest
-from mcp_guard.evaluation import evaluate
+
 from mcp_guard.corpus import load_corpus
+from mcp_guard.evaluation import evaluate
 
 
 @pytest.mark.asyncio
