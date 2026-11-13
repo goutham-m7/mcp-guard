@@ -10,6 +10,7 @@ import jsonschema
 from .policy import Denied
 from .rpc import MAX_BYTES, VERSIONS, RpcError, error, result, validate_request
 from .state import fingerprint
+from .surfaces import dispatch as dispatch_surface
 
 
 class Guard:
@@ -168,13 +169,29 @@ class Guard:
             self.initialized = True
             return {
                 "protocolVersion": version,
-                "capabilities": {"tools": {"listChanged": True}},
+                "capabilities": {
+                    "tools": {"listChanged": True},
+                    **{
+                        s: {}
+                        for s in ("resources", "prompts")
+                        if s in self.policy.config
+                    },
+                },
                 "serverInfo": {"name": "mcp-guard", "version": "0.1.0"},
             }
         if not self.initialized:
             raise RpcError(-32000, "not_initialized")
         if method == "ping":
             return {}
+        if method in {
+            "resources/list",
+            "resources/read",
+            "prompts/list",
+            "prompts/get",
+        }:
+            if method.split("/")[0] not in self.policy.config:
+                raise RpcError(-32601, "method_not_supported")
+            return await dispatch_surface(self, method, params)
         if method not in {"tools/list", "tools/call"}:
             raise RpcError(-32601, "method_not_supported")
         await self.refresh()
