@@ -141,8 +141,12 @@ class Guard:
             if self.initialized:
                 raise RpcError(-32600, "already_initialized")
             version = params.get("protocolVersion")
-            if version not in VERSIONS:
+            if not isinstance(version, str) or not re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}", version
+            ):
                 raise RpcError(-32602, "unsupported_protocol_version")
+            if version not in VERSIONS:
+                version = max(VERSIONS)
             for upstream in self.upstreams.values():
                 info = await upstream.request(
                     method,
@@ -152,7 +156,7 @@ class Guard:
                         "clientInfo": {"name": "mcp-guard", "version": "0.1.0"},
                     },
                 )
-                if info.get("protocolVersion") != version:
+                if info.get("protocolVersion") not in VERSIONS:
                     raise RpcError(-32002, "upstream_protocol_mismatch")
             self.initialized = True
             return {
