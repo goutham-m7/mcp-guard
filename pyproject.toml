@@ -1,7 +1,7 @@
 [project]
 name = "mcp-guard"
 version = "0.1.0"
-description = "Add your description here"
+description = "A default-deny security proxy for MCP tools with reproducible attack replay"
 readme = "README.md"
 authors = [
     { name = "Goutham Madineni", email = "151193576+goutham-m7@users.noreply.github.com" }
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-guard = "mcp_guard:main"
+mcp-guard = "mcp_guard.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
@@ -28,3 +28,14 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.5",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

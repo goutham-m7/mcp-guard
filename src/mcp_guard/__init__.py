@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from mcp-guard!")
+"""mcp-guard: an explicit trust boundary around MCP tools."""
