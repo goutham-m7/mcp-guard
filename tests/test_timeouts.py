@@ -3,10 +3,10 @@ import time
 
 import pytest
 from aiohttp import web
+from test_http import serve
 
 from mcp_guard.rpc import RpcError
 from mcp_guard.transports import HttpUpstream, response_value
-from test_http import serve
 
 
 async def test_sse_heartbeat_does_not_extend_absolute_deadline():

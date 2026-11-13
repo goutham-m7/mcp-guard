@@ -85,3 +85,42 @@ not an independent benchmark. No binary scanning, persistent metadata pins, dist
 rate limits, OAuth, legacy SSE discovery, batching, progress forwarding or resumable
 streams. Future work: independent adversarial corpus, OS sandbox integration and
 external operator UI. These are not silently advertised as supported features.
+
+## Interview notes
+
+### 1. Write the tools-profile boundary, then test with an independent SDK
+The hard part is not JSON parsing: it is request correlation, notification handling,
+bounded SSE events, lifecycle negotiation and handling an upstream that never finishes.
+The implementation uses strict frame/result validation and absolute deadlines.
+Rejected: a broad transparent pass-through (exposes unsupported trust boundaries),
+and building the implementation atop the same SDK used by the tests (less independent
+wire verification). The official SDK is a test-only interoperability client.
+The protocol lifecycle reference is
+https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle.
+
+### 2. Inspect discovery at call time, not just on connection
+One initial scan misses a later description/schema rug pull. Canonical fingerprints
+and a discovery refresh before each call make that change observable before execution.
+Rejected: trusting server-supplied change notifications alone, and silently accepting
+changed metadata. The cost is an extra discovery round-trip per call and intentional
+denial of service when metadata changes legitimately. Pins are first-use trust after
+scanning, not signed attestation. Inventory limits bound aggregate memory.
+
+### 3. Confirmation must be an external authority
+A confirmation string in an agent-controlled argument would let the model authorize
+itself. Local one-use SQLite grants bind exact arguments and expire; DELETE RETURNING
+makes consumption atomic. Rejected: reusable tokens in model context and interactive
+prompts on stdio (they corrupt MCP framing and do not work headlessly).
+The operator filesystem is the authority; remote multi-user approval needs a separate
+authentication model.
+
+### At 100× scale
+First measure queue time, discovery round-trips, scan CPU and upstream latency.
+Partition by authenticated tenant/session; never share upstream process state across
+clients. Move rate limits and approvals to a transactional shared store, retain
+argument-bound atomic consumption, and use bounded queues/backpressure rather than
+unlimited task creation. Keep reviewed persistent metadata versions and invalidate
+caches with explicit policy/version keys. Isolate untrusted servers with OS
+permissions/sandboxes. Batch optional classification behind strict deadlines only
+after measuring its cost and documenting content disclosure. Do not substitute a
+larger model for authorization, request validation or process isolation.
