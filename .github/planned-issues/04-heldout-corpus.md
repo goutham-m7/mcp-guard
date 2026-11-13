@@ -1,4 +1,4 @@
-# Freeze an independent synthetic holdout
+# Freeze a separate synthetic holdout
 
 Milestone: v0.2.0
 

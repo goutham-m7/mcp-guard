@@ -167,11 +167,11 @@ The holdout was committed before its first evaluation, and no detector rules wer
 uv run mcp-guard benchmark --sessions 4 --requests 100
 ```
 
-Observed source-checkout run (400/400 successful calls, no errors):
+Observed fresh-local-clone run (400/400 successful calls, no errors):
 
 ```text
-p50: 5.900 ms; p95: 6.373 ms; p99: 6.933 ms
-throughput: 670.100 successful calls/second
+p50: 5.721 ms; p95: 5.932 ms; p99: 6.003 ms
+throughput: 695.267 successful calls/second
 ```
 
 Each session owns a real local stdio subprocess and Guard. Requests are sequential within a session, concurrent across sessions. Percentiles use nearest rank and include error latencies. Initialization, process startup and one warm-up per session are excluded; call-time discovery, scanning, schema/policy checks and audit writes are included. No classifier, remote server or network tool is measured. This is end-to-end synthetic local call latency, **not** isolated proxy overhead or a throughput guarantee. Host load and hardware change the result. Replay latency is a different workload and is not comparable. See [verification evidence](EVIDENCE.md) for fresh-clone results.
@@ -202,6 +202,8 @@ make check
 uv build
 # Build only. Do not publish automatically.
 ```
+
+Fresh-clone verification: **130 tests passed in 61.62s; 86% statement coverage**. Ruff lint and formatting checks passed. Both distributions built, and the isolated runtime-only wheel executed the demo and loaded its audit schema and both new corpus splits. Full commands and evidence are in [EVIDENCE.md](EVIDENCE.md).
 
 Wheel and sdist include the corpus splits, audit schema and MIT license. [ROADMAP.md](ROADMAP.md) records the eight v0.2 milestones and delivery commits; [CHANGELOG.md](CHANGELOG.md) lists changes; [DESIGN.md](DESIGN.md) and [v0.2 design](docs/v0.2-design.md) explain the trust boundary.
 

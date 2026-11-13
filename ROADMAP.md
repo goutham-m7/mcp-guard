@@ -34,7 +34,7 @@ Acceptance: Namespaced prompt discovery/get and opaque resource URI discovery/re
 
 Test plan: Real subprocess journeys plus hostile metadata/output, invalid shape, pagination and changed metadata tests.
 
-### 04. Freeze an independent synthetic holdout
+### 04. Freeze a separate synthetic holdout
 
 Status: complete. Delivery range: `151d7bc..8f60b8d` (holdout freeze: `4e34e37`).
 
@@ -76,7 +76,7 @@ Test plan: Real subprocess harness tests; run measured concurrency samples with 
 
 ### 08. Build and verify v0.2.0 distributions
 
-Status: release build implemented in `126d789..b8214d3`; fresh-clone verification pending.
+Status: complete. Delivery range: `126d789..e1790bb`; fresh clone at `e1790bb` passed install, 130 tests, lint, format, demo, replay, benchmark, wheel/sdist build and isolated-wheel checks. Evidence: `EVIDENCE.md`.
 
 Problem: The next release needs installable artifacts and reproducible evidence.
 
