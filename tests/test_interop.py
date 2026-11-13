@@ -3,15 +3,14 @@
 import sys
 
 import httpx2
-import pytest
 import yaml
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
+from test_http import serve
 
 from mcp_guard.config import Config
 from mcp_guard.server import create_app
-from test_http import serve
 
 
 def config_data():
