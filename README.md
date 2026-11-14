@@ -2,6 +2,25 @@
 
 A default-deny MCP proxy for tools, text resources and prompts over stdio and Streamable HTTP/SSE.
 
+## The problem
+
+People connecting an AI assistant to MCP servers expose it to tool descriptions and
+results that can contain hostile instructions, not just useful data.
+
+- Invariant's [tool-poisoning advisory](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)
+  demonstrates malicious descriptions inducing credential disclosure, cross-server
+  instruction hijacking, and descriptions changed after initial approval
+  (2025-04-01).
+- Its [WhatsApp MCP attack report](https://invariantlabs.ai/blog/whatsapp-mcp-exploited)
+  demonstrates chat-history exfiltration through a trusted server and an injected
+  message leaking contacts through tool output (2025-04-07; updated 2025-04-09).
+  These are researcher demonstrations, not claims of a confirmed production breach.
+
+mcp-guard adds default-deny operation grants, argument restrictions, one-use
+approvals, metadata pinning and heuristic scanning at the MCP boundary; it is not
+a sandbox or a universal prompt-injection defense, and its synthetic evaluation
+still includes bypasses and false positives.
+
 - Constrain operations before execution with YAML grants, argument restrictions, one-use approvals and per-server/per-operation rate limits.
 - Scan metadata and results before releasing them. Pin metadata for the session; quarantine changed entries.
 - Replay separate tuning, held-out attack and benign corpora against real subprocesses. Report misses and false positives rather than tuning them away.
